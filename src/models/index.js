@@ -124,7 +124,8 @@ const db = {
   Sequelize,
   User,
   Session,
-  AnalyticsEvent
+  AnalyticsEvent,
+  ChatInteraction 
 };
 
 module.exports = db;

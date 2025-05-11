@@ -57,7 +57,7 @@ if (event.event_type === 'CHAT_INTERACTION' && event.data) {
       user_id: user.user_id,
       session_id: event.session_id,
       message_type: event.data.message_type || 'unknown',
-      message_content: null, // Por privacidad no guardamos el contenido completo
+      message_content: event.data.message_content || null,
       timestamp: new Date(event.timestamp),
       included_code: event.data.included_code === true,
       code_language: event.data.code_language || null,
