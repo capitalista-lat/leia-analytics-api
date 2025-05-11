@@ -83,6 +83,36 @@ const AnalyticsEvent = sequelize.define('AnalyticsEvent', {
   timestamps: false
 });
 
+// Modelo para la tabla chat_interactions ya existente
+const ChatInteraction = sequelize.define('ChatInteraction', {
+  interaction_id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  user_id: DataTypes.INTEGER,
+  session_id: DataTypes.STRING,
+  message_type: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  message_content: DataTypes.TEXT,
+  timestamp: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  included_code: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  code_language: DataTypes.STRING,
+  query_category: DataTypes.STRING,
+  response_helpful: DataTypes.BOOLEAN
+}, {
+  tableName: 'chat_interactions',
+  timestamps: false
+});
+
 // Establecer relaciones
 Session.belongsTo(User, { foreignKey: 'user_id' });
 AnalyticsEvent.belongsTo(User, { foreignKey: 'user_id' });

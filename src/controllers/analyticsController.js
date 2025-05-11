@@ -49,6 +49,28 @@ exports.processEvents = async (req, res) => {
         });
         continue;
       }
+
+      // Cuando procesamos un evento CHAT_INTERACTION
+if (event.event_type === 'CHAT_INTERACTION' && event.data) {
+  try {
+    await db.ChatInteraction.create({
+      user_id: user.user_id,
+      session_id: event.session_id,
+      message_type: event.data.message_type || 'unknown',
+      message_content: null, // Por privacidad no guardamos el contenido completo
+      timestamp: new Date(event.timestamp),
+      included_code: event.data.included_code === true,
+      code_language: event.data.code_language || null,
+      query_category: event.data.query_category || null,
+      response_helpful: event.data.response_helpful || null
+    });
+    
+    console.log('Chat interaction guardada correctamente en la tabla chat_interactions');
+  } catch (error) {
+    console.error('Error al guardar interacción de chat:', error);
+    // No fallamos el evento completo si esto falla, solo lo registramos
+  }
+}
       
       // Procesar sesión si hay ID de sesión
       let session;
