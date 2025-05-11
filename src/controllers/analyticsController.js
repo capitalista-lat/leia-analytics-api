@@ -71,6 +71,36 @@ if (event.event_type === 'CHAT_INTERACTION' && event.data) {
     // No fallamos el evento completo si esto falla, solo lo registramos
   }
 }
+// Cuando procesamos un evento CODE_SNAPSHOT
+if (event.event_type === 'CODE_SNAPSHOT' && event.data) {
+  try {
+    const metadata = event.data.metadata || {};
+    const codeContent = event.data.code_content;
+    
+    if (!codeContent) {
+      console.log('Instantánea de código sin contenido, omitiendo');
+      continue;
+    }
+    
+    await db.CodeSnapshot.create({
+      user_id: user.user_id,
+      session_id: event.session_id,
+      file_name: metadata.file_name || 'unknown.txt',
+      language: metadata.language || 'plaintext',
+      file_path: metadata.file_path || '',
+      code_content: codeContent,
+      line_count: metadata.metrics?.line_count || 0,
+      char_count: metadata.metrics?.char_count || 0,
+      workspace_info: metadata.workspace || {},
+      pair_session_info: metadata.pair_session || null,
+      timestamp: new Date(event.timestamp)
+    });
+    
+    console.log(`Instantánea de código guardada correctamente: ${metadata.file_name}`);
+  } catch (error) {
+    console.error('Error al guardar instantánea de código:', error);
+  }
+}
       
       // Procesar sesión si hay ID de sesión
       let session;

@@ -113,6 +113,43 @@ const ChatInteraction = sequelize.define('ChatInteraction', {
   timestamps: false
 });
 
+const CodeSnapshot = sequelize.define('CodeSnapshot', {
+  snapshot_id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  user_id: DataTypes.INTEGER,
+  session_id: DataTypes.STRING,
+  file_name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  language: DataTypes.STRING,
+  file_path: DataTypes.STRING,
+  code_content: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  line_count: DataTypes.INTEGER,
+  char_count: DataTypes.INTEGER,
+  workspace_info: DataTypes.JSONB,
+  pair_session_info: DataTypes.JSONB,
+  timestamp: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: Sequelize.NOW
+  }
+}, {
+  tableName: 'code_snapshots',
+  timestamps: false
+});
+
+// Establecer relaciones
+CodeSnapshot.belongsTo(User, { foreignKey: 'user_id' });
+CodeSnapshot.belongsTo(Session, { foreignKey: 'session_id' });
+
+
 // Establecer relaciones
 Session.belongsTo(User, { foreignKey: 'user_id' });
 AnalyticsEvent.belongsTo(User, { foreignKey: 'user_id' });
@@ -125,7 +162,8 @@ const db = {
   User,
   Session,
   AnalyticsEvent,
-  ChatInteraction 
+  ChatInteraction,
+  CodeSnapshot 
 };
 
 module.exports = db;
