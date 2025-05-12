@@ -95,57 +95,59 @@ exports.processEvents = async (req, res) => {
       }
       
       // Cuando procesamos un evento CODE_SNAPSHOT
-      if (event.event_type === 'CODE_SNAPSHOT' && event.data) {
-        try {
-          // Log the data structure for debugging
-          console.log('CODE_SNAPSHOT data structure:', JSON.stringify(event.data).substring(0, 200) + '...');
-          
-          const metadata = event.data.metadata || {};
-          const codeContent = event.data.code_content;
-          
-          if (!codeContent) {
-            console.log('Instantánea de código sin contenido, omitiendo');
-            results.push({ 
-              status: 'error', 
-              message: 'Falta el contenido del código',
-              event_type: event.event_type
-            });
-            continue;
-          }
-          
-          // Create the code snapshot with proper data mapping
-          const codeSnapshot = await db.CodeSnapshot.create({
-            user_id: user.user_id,
-            session_id: event.session_id,
-            file_name: metadata.file_name || 'unknown.txt',
-            language: metadata.language || 'plaintext',
-            file_path: metadata.file_path || '',
-            code_content: codeContent,
-            line_count: metadata.metrics?.line_count || 0,
-            char_count: metadata.metrics?.char_count || 0,
-            workspace_info: metadata.workspace || {},
-            pair_session_info: metadata.pair_session || null,
-            timestamp: new Date(event.timestamp)
-          });
-          
-          console.log(`Instantánea de código guardada correctamente: ${metadata.file_name}, ID: ${codeSnapshot.snapshot_id}`);
-          
-          results.push({ 
-            status: 'success', 
-            message: 'Instantánea de código guardada',
-            snapshot_id: codeSnapshot.snapshot_id,
-            event_type: event.event_type
-          });
-          
-        } catch (error) {
-          console.error('Error al guardar instantánea de código:', error);
-          results.push({ 
-            status: 'error', 
-            message: `Error al guardar instantánea de código: ${error.message}`,
-            event_type: event.event_type
-          });
-        }
-      }
+      // When processing a CODE_SNAPSHOT event
+if (event.event_type === 'CODE_SNAPSHOT') {
+  try {
+    // Debugging to see the structure of the event
+    console.log('Processing CODE_SNAPSHOT event with data structure:', JSON.stringify(event).substring(0, 200) + '...');
+    
+    // Extract data properly from event structure
+    const metadata = event.data && event.data.metadata ? event.data.metadata : {};
+    const codeContent = event.data && event.data.code_content ? event.data.code_content : null;
+    
+    if (!codeContent) {
+      console.log('CODE_SNAPSHOT sin contenido de código, omitiendo');
+      results.push({ 
+        status: 'error', 
+        message: 'Falta el contenido del código',
+        event_type: event.event_type
+      });
+      continue;
+    }
+    
+    // Create the code snapshot with proper data mapping
+    const codeSnapshot = await db.CodeSnapshot.create({
+      user_id: user.user_id,
+      session_id: event.session_id,
+      file_name: metadata.file_name || 'unknown.txt',
+      language: metadata.language || 'plaintext',
+      file_path: metadata.file_path || '',
+      code_content: codeContent,
+      line_count: metadata.metrics && metadata.metrics.line_count ? metadata.metrics.line_count : 0,
+      char_count: metadata.metrics && metadata.metrics.char_count ? metadata.metrics.char_count : 0,
+      workspace_info: metadata.workspace || {},
+      pair_session_info: metadata.pair_session || null,
+      timestamp: new Date(event.timestamp)
+    });
+    
+    console.log(`CODE_SNAPSHOT guardado correctamente: ${metadata.file_name}, ID: ${codeSnapshot.snapshot_id}`);
+    
+    results.push({ 
+      status: 'success', 
+      message: 'Instantánea de código guardada',
+      snapshot_id: codeSnapshot.snapshot_id,
+      event_type: event.event_type
+    });
+    
+  } catch (error) {
+    console.error('Error al guardar CODE_SNAPSHOT:', error);
+    results.push({ 
+      status: 'error', 
+      message: `Error al guardar instantánea de código: ${error.message}`,
+      event_type: event.event_type
+    });
+  }
+}
       
       // Guardar el evento general en analytics_events
       try {
