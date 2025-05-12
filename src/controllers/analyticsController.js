@@ -10,6 +10,7 @@ exports.processEvents = async (req, res) => {
       return res.status(400).json({ error: 'Se requiere un array de eventos no vacío' });
     }
     
+    console.log(`Procesando ${events.length} eventos`);
     const results = [];
     
     for (const event of events) {
@@ -22,6 +23,8 @@ exports.processEvents = async (req, res) => {
         });
         continue;
       }
+      
+      console.log(`Procesando evento: ${event.event_type}`);
       
       // Obtener o crear usuario
       let user;
@@ -50,58 +53,6 @@ exports.processEvents = async (req, res) => {
         continue;
       }
 
-      // Cuando procesamos un evento CHAT_INTERACTION
-if (event.event_type === 'CHAT_INTERACTION' && event.data) {
-  try {
-    await db.ChatInteraction.create({
-      user_id: user.user_id,
-      session_id: event.session_id,
-      message_type: event.data.message_type || 'unknown',
-      message_content: event.data.message_content || null,
-      timestamp: new Date(event.timestamp),
-      included_code: event.data.included_code === true,
-      code_language: event.data.code_language || null,
-      query_category: event.data.query_category || null,
-      response_helpful: event.data.response_helpful || null
-    });
-    
-    console.log('Chat interaction guardada correctamente en la tabla chat_interactions');
-  } catch (error) {
-    console.error('Error al guardar interacción de chat:', error);
-    // No fallamos el evento completo si esto falla, solo lo registramos
-  }
-}
-// Cuando procesamos un evento CODE_SNAPSHOT
-if (event.event_type === 'CODE_SNAPSHOT' && event.data) {
-  try {
-    const metadata = event.data.metadata || {};
-    const codeContent = event.data.code_content;
-    
-    if (!codeContent) {
-      console.log('Instantánea de código sin contenido, omitiendo');
-      continue;
-    }
-    
-    await db.CodeSnapshot.create({
-      user_id: user.user_id,
-      session_id: event.session_id,
-      file_name: metadata.file_name || 'unknown.txt',
-      language: metadata.language || 'plaintext',
-      file_path: metadata.file_path || '',
-      code_content: codeContent,
-      line_count: metadata.metrics?.line_count || 0,
-      char_count: metadata.metrics?.char_count || 0,
-      workspace_info: metadata.workspace || {},
-      pair_session_info: metadata.pair_session || null,
-      timestamp: new Date(event.timestamp)
-    });
-    
-    console.log(`Instantánea de código guardada correctamente: ${metadata.file_name}`);
-  } catch (error) {
-    console.error('Error al guardar instantánea de código:', error);
-  }
-}
-      
       // Procesar sesión si hay ID de sesión
       let session;
       if (event.session_id) {
@@ -117,10 +68,86 @@ if (event.event_type === 'CODE_SNAPSHOT' && event.data) {
           });
         } catch (error) {
           console.error('Error al procesar sesión:', error);
+          // No fallamos todo el evento por esto, continuamos
         }
       }
       
-      // Guardar el evento
+      // Cuando procesamos un evento CHAT_INTERACTION
+      if (event.event_type === 'CHAT_INTERACTION' && event.data) {
+        try {
+          await db.ChatInteraction.create({
+            user_id: user.user_id,
+            session_id: event.session_id,
+            message_type: event.data.message_type || 'unknown',
+            message_content: event.data.message_content || null,
+            timestamp: new Date(event.timestamp),
+            included_code: event.data.included_code === true,
+            code_language: event.data.code_language || null,
+            query_category: event.data.query_category || null,
+            response_helpful: event.data.response_helpful || null
+          });
+          
+          console.log('Chat interaction guardada correctamente en la tabla chat_interactions');
+        } catch (error) {
+          console.error('Error al guardar interacción de chat:', error);
+          // No fallamos el evento completo si esto falla, solo lo registramos
+        }
+      }
+      
+      // Cuando procesamos un evento CODE_SNAPSHOT
+      if (event.event_type === 'CODE_SNAPSHOT' && event.data) {
+        try {
+          // Log the data structure for debugging
+          console.log('CODE_SNAPSHOT data structure:', JSON.stringify(event.data).substring(0, 200) + '...');
+          
+          const metadata = event.data.metadata || {};
+          const codeContent = event.data.code_content;
+          
+          if (!codeContent) {
+            console.log('Instantánea de código sin contenido, omitiendo');
+            results.push({ 
+              status: 'error', 
+              message: 'Falta el contenido del código',
+              event_type: event.event_type
+            });
+            continue;
+          }
+          
+          // Create the code snapshot with proper data mapping
+          const codeSnapshot = await db.CodeSnapshot.create({
+            user_id: user.user_id,
+            session_id: event.session_id,
+            file_name: metadata.file_name || 'unknown.txt',
+            language: metadata.language || 'plaintext',
+            file_path: metadata.file_path || '',
+            code_content: codeContent,
+            line_count: metadata.metrics?.line_count || 0,
+            char_count: metadata.metrics?.char_count || 0,
+            workspace_info: metadata.workspace || {},
+            pair_session_info: metadata.pair_session || null,
+            timestamp: new Date(event.timestamp)
+          });
+          
+          console.log(`Instantánea de código guardada correctamente: ${metadata.file_name}, ID: ${codeSnapshot.snapshot_id}`);
+          
+          results.push({ 
+            status: 'success', 
+            message: 'Instantánea de código guardada',
+            snapshot_id: codeSnapshot.snapshot_id,
+            event_type: event.event_type
+          });
+          
+        } catch (error) {
+          console.error('Error al guardar instantánea de código:', error);
+          results.push({ 
+            status: 'error', 
+            message: `Error al guardar instantánea de código: ${error.message}`,
+            event_type: event.event_type
+          });
+        }
+      }
+      
+      // Guardar el evento general en analytics_events
       try {
         const savedEvent = await db.AnalyticsEvent.create({
           event_type: event.event_type,
@@ -130,10 +157,14 @@ if (event.event_type === 'CODE_SNAPSHOT' && event.data) {
           data: event.data || {}
         });
         
-        results.push({ 
-          status: 'success', 
-          event_id: savedEvent.event_id 
-        });
+        // Solo agregamos un resultado si no hay uno específico (como CODE_SNAPSHOT)
+        if (!results.some(r => r.event_type === event.event_type)) {
+          results.push({ 
+            status: 'success', 
+            event_id: savedEvent.event_id,
+            event_type: event.event_type
+          });
+        }
       } catch (error) {
         console.error('Error al guardar evento:', error);
         results.push({ 
@@ -176,6 +207,9 @@ exports.getSummary = async (req, res) => {
       order: [[db.sequelize.literal('count'), 'DESC']]
     });
     
+    // Contar instantáneas de código
+    const codeSnapshotCount = await db.CodeSnapshot.count();
+    
     // Actividad reciente (últimas 24 horas)
     const recentActivity = await db.AnalyticsEvent.count({
       where: {
@@ -188,6 +222,7 @@ exports.getSummary = async (req, res) => {
     return res.status(200).json({
       user_count: userCount,
       session_count: sessionCount,
+      code_snapshot_count: codeSnapshotCount,
       event_types: eventTypeCount,
       recent_activity: recentActivity
     });
@@ -227,6 +262,17 @@ exports.getUserActivity = async (req, res) => {
       order: [[db.sequelize.literal('count'), 'DESC']]
     });
     
+    // Obtener instantáneas de código (solo metadatos)
+    const codeSnapshots = await db.CodeSnapshot.findAll({
+      attributes: [
+        'snapshot_id', 'file_name', 'language', 'line_count', 
+        'char_count', 'timestamp'
+      ],
+      where: { user_id: user.user_id },
+      order: [['timestamp', 'DESC']],
+      limit: 20
+    });
+    
     return res.status(200).json({
       user: {
         email: user.email,
@@ -235,7 +281,8 @@ exports.getUserActivity = async (req, res) => {
         last_active_at: user.last_active_at
       },
       events_by_type: eventsByType,
-      recent_events: events
+      recent_events: events,
+      code_snapshots: codeSnapshots
     });
     
   } catch (error) {
