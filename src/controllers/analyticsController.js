@@ -148,6 +148,20 @@ if (event.event_type === 'CODE_SNAPSHOT') {
     });
   }
 }
+
+if (event.event_type.startsWith('PAIR_')) {
+  try {
+    await processPairProgrammingEvent(event, user, session);
+    console.log(`Evento de pair programming procesado: ${event.event_type}`);
+  } catch (error) {
+    console.error('Error al procesar evento de pair programming:', error);
+    results.push({ 
+      status: 'error', 
+      message: `Error al procesar evento de pair programming: ${error.message}`,
+      event_type: event.event_type
+    });
+  }
+}
       
       // Guardar el evento general en analytics_events
       try {
@@ -292,3 +306,155 @@ exports.getUserActivity = async (req, res) => {
     return res.status(500).json({ error: 'Error del servidor al obtener actividad de usuario' });
   }
 };
+
+async function processPairProgrammingEvent(event, user, session) {
+  const { event_type, data, session_id } = event;
+  
+  switch (event_type) {
+    case 'PAIR_SESSION_START':
+      await handlePairSessionStart(data, user, session_id);
+      break;
+      
+    case 'PAIR_ROLE_SWITCH':
+      await handlePairRoleSwitch(data, session_id);
+      break;
+      
+    case 'PAIR_SESSION_END':
+      await handlePairSessionEnd(data, session_id);
+      break;
+      
+    default:
+      console.log(`Evento de pair programming no manejado: ${event_type}`);
+  }
+}
+
+// Manejar inicio de sesión de pair programming
+async function handlePairSessionStart(data, user, session_id) {
+  try {
+    // Buscar el navegante por email
+    const navigatorUser = await db.User.findOne({
+      where: { email: data.navigator_email }
+    });
+    
+    if (!navigatorUser) {
+      // Crear el usuario navegante si no existe
+      const [newNavigator] = await db.User.findOrCreate({
+        where: { email: data.navigator_email },
+        defaults: {
+          university_domain: data.navigator_email.split('@')[1],
+          created_at: new Date(),
+          last_active_at: new Date()
+        }
+      });
+      navigatorUser = newNavigator;
+    }
+    
+    // Crear la sesión de pair programming
+    await db.PairProgrammingSession.create({
+      session_id: session_id,
+      driver_id: user.user_id,
+      navigator_id: navigatorUser.user_id,
+      start_time: new Date(data.start_time || new Date()),
+      total_role_switches: 0,
+      completed_tasks_count: 0,
+      pending_tasks_count: 0
+    });
+    
+    console.log(`Sesión de pair programming iniciada: Driver=${user.email}, Navigator=${data.navigator_email}`);
+    
+  } catch (error) {
+    console.error('Error al crear sesión de pair programming:', error);
+    throw error;
+  }
+}
+
+// Manejar cambio de roles
+async function handlePairRoleSwitch(data, session_id) {
+  try {
+    // Buscar la sesión de pair programming activa
+    const ppSession = await db.PairProgrammingSession.findOne({
+      where: { 
+        session_id: session_id,
+        end_time: null // Solo sesiones activas
+      }
+    });
+    
+    if (ppSession) {
+      // Incrementar contador de cambios de rol
+      ppSession.total_role_switches += 1;
+      await ppSession.save();
+      
+      console.log(`Cambio de roles registrado. Total: ${ppSession.total_role_switches}`);
+    }
+    
+  } catch (error) {
+    console.error('Error al registrar cambio de roles:', error);
+    throw error;
+  }
+}
+
+// Manejar fin de sesión de pair programming
+async function handlePairSessionEnd(data, session_id) {
+  try {
+    // Buscar la sesión de pair programming activa
+    const ppSession = await db.PairProgrammingSession.findOne({
+      where: { 
+        session_id: session_id,
+        end_time: null // Solo sesiones activas
+      }
+    });
+    
+    if (ppSession) {
+      // Actualizar la sesión con datos de finalización
+      ppSession.end_time = new Date(data.end_time || new Date());
+      ppSession.completed_tasks_count = data.completed_tasks || 0;
+      ppSession.pending_tasks_count = data.pending_tasks || 0;
+      
+      await ppSession.save();
+      
+      console.log(`Sesión de pair programming finalizada. ID: ${ppSession.pp_session_id}`);
+    }
+    
+  } catch (error) {
+    console.error('Error al finalizar sesión de pair programming:', error);
+    throw error;
+  }
+}
+
+// Procesar eventos de tareas
+if (event.event_type.startsWith('TASK_')) {
+  try {
+    await processTaskEvent(event, user, session_id);
+    console.log(`Evento de tarea procesado: ${event.event_type}`);
+  } catch (error) {
+    console.error('Error al procesar evento de tarea:', error);
+  }
+}
+
+// Función para procesar eventos de tareas
+async function processTaskEvent(event, user, session_id) {
+  const { event_type } = event;
+  
+  // Buscar la sesión de pair programming activa
+  const ppSession = await db.PairProgrammingSession.findOne({
+    where: { 
+      session_id: session_id,
+      end_time: null
+    }
+  });
+  
+  if (!ppSession) return; // No hay sesión activa
+  
+  if (event_type === 'TASK_CREATE') {
+    // Incrementar contador de tareas pendientes
+    ppSession.pending_tasks_count += 1;
+    await ppSession.save();
+  } else if (event_type === 'TASK_COMPLETE') {
+    // Mover de pendiente a completada
+    if (ppSession.pending_tasks_count > 0) {
+      ppSession.pending_tasks_count -= 1;
+    }
+    ppSession.completed_tasks_count += 1;
+    await ppSession.save();
+  }
+}

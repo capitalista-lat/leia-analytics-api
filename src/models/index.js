@@ -145,6 +145,54 @@ const CodeSnapshot = sequelize.define('CodeSnapshot', {
   timestamps: false
 });
 
+const PairProgrammingSession = sequelize.define('PairProgrammingSession', {
+  pp_session_id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  session_id: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  navigator_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  start_time: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  end_time: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  total_role_switches: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  completed_tasks_count: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  pending_tasks_count: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  }
+}, {
+  tableName: 'pair_programming_sessions',
+  timestamps: false
+});
+
+PairProgrammingSession.belongsTo(Session, { foreignKey: 'session_id' });
+PairProgrammingSession.belongsTo(User, { as: 'Driver', foreignKey: 'driver_id' });
+PairProgrammingSession.belongsTo(User, { as: 'Navigator', foreignKey: 'navigator_id' });
+
+
 // Establecer relaciones
 CodeSnapshot.belongsTo(User, { foreignKey: 'user_id' });
 CodeSnapshot.belongsTo(Session, { foreignKey: 'session_id' });
@@ -163,7 +211,8 @@ const db = {
   Session,
   AnalyticsEvent,
   ChatInteraction,
-  CodeSnapshot 
+  CodeSnapshot,
+  PairProgrammingSession
 };
 
 module.exports = db;

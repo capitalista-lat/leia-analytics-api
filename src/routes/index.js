@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const analyticsController = require('../controllers/analyticsController');
 const { simplifiedAuth } = require('../middlewares/auth');
+const db = require('../models'); // Add this missing import
 
 // Rutas para analytics
 router.post('/analytics', simplifiedAuth, analyticsController.processEvents);
@@ -82,5 +83,95 @@ router.get('/analytics/code-snapshots/user/:email', simplifiedAuth, async (req, 
       return res.status(500).json({ error: 'Error del servidor al obtener instantáneas de sesión' });
     }
   });
+
+  router.get('/analytics/pair-programming/user/:email', simplifiedAuth, async (req, res) => {
+  try {
+    const { email } = req.params;
+    const db = require('../models');
+    
+    // Verificar que el email existe
+    const user = await db.User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    
+    // Obtener sesiones de pair programming donde el usuario participó
+    const ppSessions = await db.PairProgrammingSession.findAll({
+      where: {
+        [db.Sequelize.Op.or]: [
+          { driver_id: user.user_id },
+          { navigator_id: user.user_id }
+        ]
+      },
+      include: [
+        {
+          model: db.User,
+          as: 'Driver',
+          attributes: ['email']
+        },
+        {
+          model: db.User,
+          as: 'Navigator',
+          attributes: ['email']
+        }
+      ],
+      order: [['start_time', 'DESC']]
+    });
+    
+    return res.status(200).json({
+      user_email: email,
+      total_sessions: ppSessions.length,
+      sessions: ppSessions
+    });
+    
+  } catch (error) {
+    console.error('Error al obtener sesiones de pair programming:', error);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// Ruta para obtener estadísticas de pair programming
+router.get('/analytics/pair-programming/stats', simplifiedAuth, async (req, res) => {
+  try {
+    const db = require('../models');
+    
+    // Estadísticas generales
+    const totalSessions = await db.PairProgrammingSession.count();
+    const activeSessions = await db.PairProgrammingSession.count({
+      where: { end_time: null }
+    });
+    const completedSessions = await db.PairProgrammingSession.count({
+      where: { end_time: { [db.Sequelize.Op.not]: null } }
+    });
+    
+    // Promedio de cambios de rol
+    const avgRoleSwitches = await db.PairProgrammingSession.findOne({
+      attributes: [
+        [db.sequelize.fn('AVG', db.sequelize.col('total_role_switches')), 'avg_switches']
+      ],
+      where: { end_time: { [db.Sequelize.Op.not]: null } }
+    });
+    
+    // Promedio de tareas completadas
+    const avgCompletedTasks = await db.PairProgrammingSession.findOne({
+      attributes: [
+        [db.sequelize.fn('AVG', db.sequelize.col('completed_tasks_count')), 'avg_completed']
+      ],
+      where: { end_time: { [db.Sequelize.Op.not]: null } }
+    });
+    
+    return res.status(200).json({
+      total_sessions: totalSessions,
+      active_sessions: activeSessions,
+      completed_sessions: completedSessions,
+      avg_role_switches: parseFloat(avgRoleSwitches?.dataValues?.avg_switches || 0).toFixed(2),
+      avg_completed_tasks: parseFloat(avgCompletedTasks?.dataValues?.avg_completed || 0).toFixed(2)
+    });
+    
+  } catch (error) {
+    console.error('Error al obtener estadísticas de pair programming:', error);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+});
 
 module.exports = router;
