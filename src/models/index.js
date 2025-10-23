@@ -596,7 +596,7 @@ const PPTask = sequelize.define('PPTask', {
   task_id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
-    autoIncrement: true
+    autoIncrement: true  // ✅ Asegúrate que esté así
   },
   pp_session_id: {
     type: DataTypes.INTEGER,
