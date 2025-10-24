@@ -135,11 +135,35 @@ const receiveEvents = async (req, res) => {
 /**
  * Valida la estructura básica de un evento
  */
+/**
+ * Valida la estructura básica de un evento
+ */
 function validateEvent(event) {
-    if (!event || typeof event !== 'object') return false;
-    if (!event.event_id) return false;
-    if (!event.event_type) return false;
-    if (!event.timestamp) return false;
+    if (!event || typeof event !== 'object') {
+        console.log('❌ Validación falló: evento no es un objeto válido');
+        console.log('   Tipo recibido:', typeof event);
+        console.log('   Contenido:', JSON.stringify(event).substring(0, 200));
+        return false;
+    }
+    
+    if (!event.event_id) {
+        console.log('❌ Validación falló: falta event_id');
+        console.log('   Evento recibido:', JSON.stringify(event).substring(0, 500));
+        return false;
+    }
+    
+    if (!event.event_type) {
+        console.log('❌ Validación falló: falta event_type');
+        console.log('   Evento recibido:', JSON.stringify(event).substring(0, 500));
+        return false;
+    }
+    
+    if (!event.timestamp) {
+        console.log('❌ Validación falló: falta timestamp');
+        console.log('   Evento recibido:', JSON.stringify(event).substring(0, 500));
+        return false;
+    }
+    
     return true;
 }
 
